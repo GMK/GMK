@@ -1,0 +1,3 @@
+- 👋 I’m @GMK
+- 👀 I’m interested in NLP, Math
+- 🌱 I’m currently learning BERT, Actuarial Math
