@@ -175,7 +175,12 @@
 
   <section class="stage">
     <div class="panel">
-      <h2>宇宙から <small>ドラッグで回転 — ●があなた</small></h2>
+      <h2>宇宙から
+        <span style="display:flex;align-items:baseline;gap:6px">
+          <small>ドラッグで回転 — ●があなた</small>
+          <button class="chip" id="followBtn" aria-pressed="false">あなたを追う</button>
+        </span>
+      </h2>
       <div class="canvasbox"><canvas id="space"></canvas></div>
     </div>
     <div class="panel">
@@ -219,8 +224,32 @@ const state={
   yawS:-80, pitchS:24,      // celestial dome camera
   skyMode:"dome",
   playTime:false, playDate:false,
-  analemma:false,
+  analemma:false, follow:false,
 };
+
+/* earth orientation basis for a given declination (sun toward -X, z up) */
+function earthFrame(dec){
+  const t=-dec*RAD;
+  const axis={x:Math.sin(t),y:0,z:Math.cos(t)};
+  const d=-axis.x;
+  let xe={x:-1-d*axis.x,y:0,z:-d*axis.z};
+  const nl=Math.hypot(xe.x,xe.y,xe.z);xe={x:xe.x/nl,y:xe.y/nl,z:xe.z/nl};
+  const ye={x:axis.y*xe.z-axis.z*xe.y, y:axis.z*xe.x-axis.x*xe.z, z:axis.x*xe.y-axis.y*xe.x};
+  const P=(latDeg,Hdeg)=>{
+    const phi=latDeg*RAD,H=Hdeg*RAD;
+    const c=Math.cos(phi),sn=Math.sin(phi),cH=Math.cos(H),sH=Math.sin(H);
+    return {x:c*(cH*xe.x - sH*ye.x)+sn*axis.x,
+            y:c*(cH*xe.y - sH*ye.y)+sn*axis.y,
+            z:c*(cH*xe.z - sH*ye.z)+sn*axis.z};
+  };
+  return {axis,P};
+}
+/* camera yaw that puts the observer face-on to the viewer */
+function followYaw(){
+  const {P}=earthFrame(decOfDay(state.day));
+  const op=P(state.lat,hourAngle(state.time,state.day));
+  return Math.atan2(-op.x,-op.y)/RAD;
+}
 
 /* ---------- astronomy ---------- */
 function decOfDay(N){ return -23.44*Math.cos(TAU*(N+10)/365); }
@@ -296,6 +325,7 @@ function drawSpace(){
   const {ctx,w,h}=fit($("space"));
   ctx.clearRect(0,0,w,h);
   const cx=w*0.52, cy=h*0.54, R=Math.min(w,h)*0.30;
+  if(state.follow)state.yaw=followYaw();
   const cam=camera(state.yaw,state.pitch);
   const dec=decOfDay(state.day);
   const sans=SANS();
@@ -383,19 +413,7 @@ function drawSpace(){
   })();
 
   /* earth-frame basis for lat/H points */
-  const t=-dec*RAD;
-  const axis={x:Math.sin(t),y:0,z:Math.cos(t)};
-  const d=-axis.x;
-  let xe={x:-1-d*axis.x,y:0,z:-d*axis.z};
-  const nl=Math.hypot(xe.x,xe.y,xe.z);xe={x:xe.x/nl,y:xe.y/nl,z:xe.z/nl};
-  const ye={x:axis.y*xe.z-axis.z*xe.y, y:axis.z*xe.x-axis.x*xe.z, z:axis.x*xe.y-axis.y*xe.x};
-  const P=(latDeg,Hdeg)=>{
-    const phi=latDeg*RAD,H=Hdeg*RAD;
-    const c=Math.cos(phi),sn=Math.sin(phi),cH=Math.cos(H),sH=Math.sin(H);
-    return {x:c*(cH*xe.x - sH*ye.x)+sn*axis.x,
-            y:c*(cH*xe.y - sH*ye.y)+sn*axis.y,
-            z:c*(cH*xe.z - sH*ye.z)+sn*axis.z};
-  };
+  const {axis,P}=earthFrame(dec);
   const S=p=>{const q=cam(p);return {x:cx+q.x*R, y:cy-q.z*R, front:q.y<0};};
 
   const circle=(latDeg,style,width,dash)=>{
@@ -443,6 +461,85 @@ function drawSpace(){
     ctx.fillStyle="rgba(238,241,248,.9)";
     ctx.fillText("あなた",os.x+9,os.y-6);
   }
+
+  /* observer's local horizon compass: their own N/E/S/W painted on the globe,
+     with an arrow showing which way the sun appears from where they stand */
+  (function compass(){
+    if(!os.front)return;
+    let E={x:axis.y*op.z-axis.z*op.y, y:axis.z*op.x-axis.x*op.z, z:axis.x*op.y-axis.y*op.x};
+    const el=Math.hypot(E.x,E.y,E.z);
+    if(el<0.05)return;                     // at the poles the compass is undefined
+    E={x:E.x/el,y:E.y/el,z:E.z/el};
+    const dN=axis.x*op.x+axis.y*op.y+axis.z*op.z;
+    let Nv={x:axis.x-dN*op.x, y:axis.y-dN*op.y, z:axis.z-dN*op.z};
+    const nl2=Math.hypot(Nv.x,Nv.y,Nv.z);
+    Nv={x:Nv.x/nl2,y:Nv.y/nl2,z:Nv.z/nl2};
+    const sR=0.46;                          // disc radius in globe radii
+    const pt=(ex,ny,k)=>({x:op.x+(ex*E.x+ny*Nv.x)*sR*(k||1),
+                          y:op.y+(ex*E.y+ny*Nv.y)*sR*(k||1),
+                          z:op.z+(ex*E.z+ny*Nv.z)*sR*(k||1)});
+    const hidden=q=>{const c=cam(q);return c.y>0&&Math.hypot(c.x,c.z)<1;};
+
+    /* horizon disc */
+    ctx.beginPath();
+    for(let a=0;a<=360;a+=6){
+      const c=S(pt(Math.cos(a*RAD),Math.sin(a*RAD)));
+      a?ctx.lineTo(c.x,c.y):ctx.moveTo(c.x,c.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle="rgba(143,198,232,.10)";ctx.fill();
+    ctx.strokeStyle="rgba(143,198,232,.45)";ctx.lineWidth=1;
+    ctx.stroke();
+
+    /* cardinal ticks + labels */
+    ctx.font="10px "+sans;ctx.textAlign="center";
+    for(const [name,ex,ny,col] of [["北",0,1,"rgba(226,112,58,.95)"],
+                                   ["東",1,0,"rgba(238,241,248,.8)"],
+                                   ["南",0,-1,"rgba(238,241,248,.8)"],
+                                   ["西",-1,0,"rgba(238,241,248,.8)"]]){
+      const q=pt(ex,ny);
+      if(hidden(q))continue;
+      const c1=S(pt(ex,ny,0.86)), c2=S(q);
+      ctx.strokeStyle=col;ctx.lineWidth=name==="北"?1.6:1;
+      ctx.beginPath();ctx.moveTo(c1.x,c1.y);ctx.lineTo(c2.x,c2.y);ctx.stroke();
+      const c3=S(pt(ex,ny,1.22));
+      ctx.fillStyle=col;
+      ctx.fillText(name,c3.x,c3.y+3.5);
+    }
+    ctx.textAlign="left";
+
+    /* arrow toward the sun, projected on the local horizon */
+    const dup=-op.x;                        // sunDir·up, sunDir=(-1,0,0)
+    let D={x:-1-dup*op.x, y:-dup*op.y, z:-dup*op.z};
+    const dl=Math.hypot(D.x,D.y,D.z);
+    if(dl>1e-4){
+      D={x:D.x/dl,y:D.y/dl,z:D.z/dl};
+      const tip={x:op.x+D.x*sR*0.94, y:op.y+D.y*sR*0.94, z:op.z+D.z*sR*0.94};
+      const c0=S(op), c1=S(tip);
+      const ddx=c1.x-c0.x, ddy=c1.y-c0.y, dm=Math.hypot(ddx,ddy);
+      if(dm>6){
+        const ux=ddx/dm, uy=ddy/dm, px=-uy, py=ux;
+        ctx.strokeStyle="rgba(246,183,60,.95)";ctx.lineWidth=2;
+        ctx.beginPath();ctx.moveTo(c0.x,c0.y);ctx.lineTo(c1.x,c1.y);ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(c1.x,c1.y);
+        ctx.lineTo(c1.x-ux*8+px*4,c1.y-uy*8+py*4);
+        ctx.lineTo(c1.x-ux*8-px*4,c1.y-uy*8-py*4);
+        ctx.closePath();ctx.fillStyle="rgba(246,183,60,.95)";ctx.fill();
+        /* what the observer would say */
+        const aa=sunAltAz(state.lat,dec,Hnow);
+        const msg=aa.alt>=0
+          ?"太陽は"+azName(aa.az)+"の空(高度"+Math.round(aa.alt)+"°)"
+          :"太陽は地平線下("+azName(aa.az)+"の方角)";
+        ctx.font="10px "+sans;
+        ctx.fillStyle="rgba(246,183,60,.95)";
+        const lx=clamp(c1.x+ux*12,70,w-70), ly=clamp(c1.y+uy*12,16,h-16);
+        ctx.textAlign=ux>0?"left":"right";
+        ctx.fillText(msg,lx,ly);
+        ctx.textAlign="left";
+      }
+    }
+  })();
 
   /* day / night labels near the limb */
   if(mag>0.3){
@@ -955,9 +1052,35 @@ function makeDraggable(cv,onDrag,onReset,isActive){
   cv.addEventListener("dblclick",()=>{if(isActive()){onReset();render();}});
 }
 makeDraggable($("space"),
-  (dx,dy)=>{state.yaw=(state.yaw+dx*0.4)%360;state.pitch=clamp(state.pitch+dy*0.4,-60,60);},
-  ()=>{state.yaw=0;state.pitch=18;},
+  (dx,dy)=>{
+    if(state.follow){state.follow=false;setFollowChip();}
+    state.yaw=(state.yaw+dx*0.4)%360;state.pitch=clamp(state.pitch+dy*0.4,-60,60);
+  },
+  ()=>{state.follow=false;setFollowChip();state.yaw=0;state.pitch=18;},
   ()=>true);
+
+/* follow mode: keep the observer face-on */
+function setFollowChip(){
+  $("followBtn").classList.toggle("on",state.follow);
+  $("followBtn").setAttribute("aria-pressed",String(state.follow));
+}
+$("followBtn").addEventListener("click",()=>{
+  if(state.follow){state.follow=false;setFollowChip();render();return;}
+  const y0=state.yaw, dy=((followYaw()-y0+540)%360)-180;
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches||Math.abs(dy)<1){
+    state.follow=true;setFollowChip();render();return;
+  }
+  const t0=performance.now();
+  const step=t=>{
+    const k=Math.min(1,(t-t0)/500);
+    const e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+    state.yaw=y0+dy*e;
+    render();
+    if(k<1)requestAnimationFrame(step);
+    else{state.follow=true;setFollowChip();render();}
+  };
+  requestAnimationFrame(step);
+});
 makeDraggable($("sky"),
   (dx,dy)=>{state.yawS=(state.yawS+dx*0.4)%360;state.pitchS=clamp(state.pitchS+dy*0.4,2,85);},
   ()=>{state.yawS=-80;state.pitchS=24;},
