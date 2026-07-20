@@ -52,6 +52,14 @@
   }
   .ctl .val{color:var(--sun);font-variant-numeric:tabular-nums;letter-spacing:.05em}
   input[type=range]{width:100%;accent-color:var(--sun);background:transparent}
+  .scale{position:relative;height:17px;margin-top:1px;font-size:9.5px;color:var(--ink-dim)}
+  .scale .tick{
+    position:absolute;top:0;left:calc(8px + (100% - 16px)*var(--p));
+    transform:translateX(-50%);text-align:center;white-space:nowrap;
+    letter-spacing:.04em;line-height:1.1;
+  }
+  .scale .tick i{display:block;width:1px;height:4px;background:var(--ink-dim);margin:0 auto 1px;opacity:.7}
+  .scale .tick.minor i{height:3px;opacity:.4}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
   .chip{
     font-family:var(--sans);font-size:12px;color:var(--ink-dim);
@@ -140,6 +148,17 @@
     <div class="ctl">
       <label>緯度 <span class="val" id="latVal">北緯 35.7°</span></label>
       <input type="range" id="lat" min="-90" max="90" step="0.1" value="35.7" aria-label="緯度">
+      <div class="scale" aria-hidden="true">
+        <span class="tick" style="--p:0"><i></i>南極点</span>
+        <span class="tick minor" style="--p:.1667"><i></i></span>
+        <span class="tick" style="--p:.25"><i></i>南45°</span>
+        <span class="tick minor" style="--p:.3333"><i></i></span>
+        <span class="tick" style="--p:.5"><i></i>赤道</span>
+        <span class="tick minor" style="--p:.6667"><i></i></span>
+        <span class="tick" style="--p:.75"><i></i>北45°</span>
+        <span class="tick minor" style="--p:.8333"><i></i></span>
+        <span class="tick" style="--p:1"><i></i>北極点</span>
+      </div>
       <div class="chips" id="latChips">
         <button class="chip" data-lat="43.1">札幌</button>
         <button class="chip" data-lat="35.7">東京</button>
@@ -157,6 +176,21 @@
         <button class="play" id="playDate" aria-label="日付を再生">▶</button>
         <input type="range" id="date" min="1" max="365" step="1" value="172" aria-label="日付(通日)">
       </div>
+      <div class="scale" aria-hidden="true" style="margin-left:44px">
+        <span class="tick" style="--p:0"><i></i>1月</span>
+        <span class="tick minor" style="--p:.0852"><i></i></span>
+        <span class="tick minor" style="--p:.1621"><i></i></span>
+        <span class="tick" style="--p:.2473"><i></i>4月</span>
+        <span class="tick minor" style="--p:.3297"><i></i></span>
+        <span class="tick minor" style="--p:.4148"><i></i></span>
+        <span class="tick" style="--p:.4973"><i></i>7月</span>
+        <span class="tick minor" style="--p:.5824"><i></i></span>
+        <span class="tick minor" style="--p:.6676"><i></i></span>
+        <span class="tick" style="--p:.75"><i></i>10月</span>
+        <span class="tick minor" style="--p:.8352"><i></i></span>
+        <span class="tick minor" style="--p:.9176"><i></i></span>
+        <span class="tick" style="--p:1"><i></i>12月末</span>
+      </div>
       <div class="chips" id="seasonChips" role="group" aria-label="季節">
         <button class="chip" data-day="80">春分</button>
         <button class="chip on" data-day="172">夏至</button>
@@ -169,6 +203,17 @@
       <div class="sliderbar">
         <button class="play" id="playTime" aria-label="時刻を再生">▶</button>
         <input type="range" id="time" min="0" max="24" step="0.05" value="12" aria-label="時刻">
+      </div>
+      <div class="scale" aria-hidden="true" style="margin-left:44px">
+        <span class="tick" style="--p:0"><i></i>0時</span>
+        <span class="tick minor" style="--p:.125"><i></i></span>
+        <span class="tick" style="--p:.25"><i></i>6時</span>
+        <span class="tick minor" style="--p:.375"><i></i></span>
+        <span class="tick" style="--p:.5"><i></i>正午</span>
+        <span class="tick minor" style="--p:.625"><i></i></span>
+        <span class="tick" style="--p:.75"><i></i>18時</span>
+        <span class="tick minor" style="--p:.875"><i></i></span>
+        <span class="tick" style="--p:1"><i></i>24時</span>
       </div>
     </div>
   </section>
