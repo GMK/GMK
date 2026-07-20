@@ -236,11 +236,12 @@ function earthFrame(dec){
   const nl=Math.hypot(xe.x,xe.y,xe.z);xe={x:xe.x/nl,y:xe.y/nl,z:xe.z/nl};
   const ye={x:axis.y*xe.z-axis.z*xe.y, y:axis.z*xe.x-axis.x*xe.z, z:axis.x*xe.y-axis.y*xe.x};
   const P=(latDeg,Hdeg)=>{
+    /* +H(午後)で観測者が東向き(axis×r の向き)に進むよう +sinH·ye を取る */
     const phi=latDeg*RAD,H=Hdeg*RAD;
     const c=Math.cos(phi),sn=Math.sin(phi),cH=Math.cos(H),sH=Math.sin(H);
-    return {x:c*(cH*xe.x - sH*ye.x)+sn*axis.x,
-            y:c*(cH*xe.y - sH*ye.y)+sn*axis.y,
-            z:c*(cH*xe.z - sH*ye.z)+sn*axis.z};
+    return {x:c*(cH*xe.x + sH*ye.x)+sn*axis.x,
+            y:c*(cH*xe.y + sH*ye.y)+sn*axis.y,
+            z:c*(cH*xe.z + sH*ye.z)+sn*axis.z};
   };
   return {axis,P};
 }
