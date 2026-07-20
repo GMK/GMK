@@ -1087,9 +1087,10 @@ makeDraggable($("sky"),
   ()=>state.skyMode==="dome");
 
 /* playback */
-let raf=null,lastT=0;
+let raf=null,lastT=0,dayAccum=0;
 function setPlay(which){
   state[which]=!state[which];
+  if(which==="playDate"&&state.playDate)dayAccum=state.day;
   $("playTime").textContent=state.playTime?"⏸":"▶";
   $("playDate").textContent=state.playDate?"⏸":"▶";
   const any=state.playTime||state.playDate;
@@ -1106,8 +1107,9 @@ function tick(t){
     $("time").value=state.time;
   }
   if(state.playDate){
-    state.day=((state.day-1+dt*24)%365)+1;      // 1年 ≈ 15s
-    $("date").value=Math.round(state.day);
+    dayAccum=((dayAccum-1+dt*24)%365)+1;        // 1年 ≈ 15s
+    state.day=Math.floor(dayAccum);             // 表示・計算は1日単位
+    $("date").value=state.day;
   }
   render();
   raf=requestAnimationFrame(tick);
