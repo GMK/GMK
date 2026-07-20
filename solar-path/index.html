@@ -91,6 +91,8 @@
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   #space{touch-action:none;cursor:grab}
   #space.dragging{cursor:grabbing}
+  #sky.grabbable{touch-action:none;cursor:grab}
+  #sky.dragging{cursor:grabbing}
 
   /* ---- readouts ---- */
   .readouts{
@@ -131,7 +133,7 @@
   <header>
     <div class="eyebrow">Solar Path — Interactive</div>
     <h1>太陽の通り道</h1>
-    <p class="lede">緯度と日付を選ぶと、宇宙から見た地球の姿(左)と、その場所の空に描かれる太陽の軌道(右)が連動して変わります。左の図はドラッグで自由に回転できます。時刻や日付を再生すると、地球の自転・公転と空の太陽の動きが同時に見えます。</p>
+    <p class="lede">緯度と日付を選ぶと、宇宙から見た地球の姿(左)と、その場所の空に描かれる太陽の軌道(右)が連動して変わります。どちらの図もドラッグで回転できます。時刻や日付を再生すると、地球の自転・公転と空の太陽の動きが同時に見えます。</p>
   </header>
 
   <section class="controls" aria-label="コントロール">
@@ -178,12 +180,13 @@
     </div>
     <div class="panel">
       <h2>地上から
-        <span style="display:flex;align-items:baseline;gap:10px">
-          <small>全天図 — 中心が真上、縁が地平線</small>
+        <span style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="chip on" id="modeDome" aria-pressed="true">天球</button>
+          <button class="chip" id="modeFlat" aria-pressed="false">全天図</button>
           <button class="chip" id="anaBtn" aria-pressed="false">アナレンマ</button>
         </span>
       </h2>
-      <div class="canvasbox"><canvas id="sky"></canvas></div>
+      <div class="canvasbox"><canvas id="sky" class="grabbable"></canvas></div>
     </div>
   </section>
 
@@ -197,9 +200,10 @@
 
   <footer>
     <b>使い方のヒント:</b>
-    左の俯瞰図はドラッグで回転、ダブルクリックで元の視点に戻ります。
-    「アナレンマ」を点けると、毎日同じ時刻に見える太陽の位置を1年分重ねた8の字が空に描かれます(均時差を含む実際の計算です)。
-    日付の ▶ で1年を再生すると、季節による軌道の変化がひと目でわかります。
+    右のパネルは「天球」(観測者を外から眺めた立体図)と「全天図」(真上を中心にした魚眼図)を切り替えられます。
+    天球では季節ごとの軌道が色分けされ、地平線との交点に日の出・日の入りの方角が示されます。
+    どちらの図もドラッグで回転、ダブルクリックで元の視点に戻ります。
+    「アナレンマ」を点けると、毎日同じ時刻に見える太陽の位置を1年分重ねた8の字が描かれます(均時差を含む実際の計算です)。
   </footer>
 </div>
 
@@ -211,7 +215,9 @@ const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 
 const state={
   lat:35.7, day:172, time:12,
-  yaw:0, pitch:18,
+  yaw:0, pitch:18,          // space view camera
+  yawS:-80, pitchS:24,      // celestial dome camera
+  skyMode:"dome",
   playTime:false, playDate:false,
   analemma:false,
 };
@@ -237,7 +243,7 @@ function dayInfo(latDeg,N){
   if(x<=-1) return {type:"midnightSun",hours:24};
   if(x>=1)  return {type:"polarNight",hours:0};
   const H0=Math.acos(x)/RAD, noon=12-eotMin(N)/60;
-  return {type:"normal",hours:2*H0/15,rise:noon-H0/15,set:noon+H0/15};
+  return {type:"normal",hours:2*H0/15,rise:noon-H0/15,set:noon+H0/15,H0};
 }
 const MONTHS=[31,28,31,30,31,30,31,31,30,31,30,31];
 function fmtDate(N){
@@ -265,22 +271,32 @@ function mixHex(c1,c2,t){
 const SANS=()=>getComputedStyle(document.body).getPropertyValue("--sans");
 const SERIF=()=>getComputedStyle(document.body).getPropertyValue("--serif");
 
-/* ---------- view 1 : space (rotatable) ---------- */
-function makeCam(){
-  const cyw=Math.cos(state.yaw*RAD), syw=Math.sin(state.yaw*RAD);
-  const cp=Math.cos(state.pitch*RAD), sp=Math.sin(state.pitch*RAD);
+/* yaw/pitch camera: returns world→camera transform; y<0 → toward viewer */
+function camera(yawDeg,pitchDeg){
+  const cyw=Math.cos(yawDeg*RAD), syw=Math.sin(yawDeg*RAD);
+  const cp=Math.cos(pitchDeg*RAD), sp=Math.sin(pitchDeg*RAD);
   return p=>{
     const x1=p.x*cyw - p.y*syw;
     const y1=p.x*syw + p.y*cyw;
     const z1=p.z;
-    return {x:x1, y:y1*cp - z1*sp, z:y1*sp + z1*cp}; // y<0 → front (toward viewer)
+    return {x:x1, y:y1*cp - z1*sp, z:y1*sp + z1*cp};
   };
 }
+
+/* sky colors by sun altitude: [top, bottom] */
+function skyColors(alt){
+  if(alt>=10)return ["#4E8FC4","#8FC6E8"];
+  if(alt>=0){const t=alt/10;return [mixHex("#33507F","#4E8FC4",t),mixHex("#E2703A","#8FC6E8",t)];}
+  if(alt>=-10){const t=(alt+10)/10;return [mixHex("#0B1020","#33507F",t),mixHex("#27356B","#E2703A",t)];}
+  return ["#0B1020","#182148"];
+}
+
+/* ---------- view 1 : space (rotatable) ---------- */
 function drawSpace(){
   const {ctx,w,h}=fit($("space"));
   ctx.clearRect(0,0,w,h);
   const cx=w*0.52, cy=h*0.54, R=Math.min(w,h)*0.30;
-  const cam=makeCam();
+  const cam=camera(state.yaw,state.pitch);
   const dec=decOfDay(state.day);
   const sans=SANS();
 
@@ -293,7 +309,7 @@ function drawSpace(){
 
   /* sun direction on screen */
   const s=cam({x:-1,y:0,z:0});
-  const sd={x:s.x, y:-s.z};                 // screen dir toward the sun (canvas coords)
+  const sd={x:s.x, y:-s.z};
   const mag=Math.hypot(sd.x,sd.y);
   const sunFront=s.y<0;
 
@@ -369,7 +385,7 @@ function drawSpace(){
   /* earth-frame basis for lat/H points */
   const t=-dec*RAD;
   const axis={x:Math.sin(t),y:0,z:Math.cos(t)};
-  const d=-axis.x; // sunDir·axis with sunDir=(-1,0,0)
+  const d=-axis.x;
   let xe={x:-1-d*axis.x,y:0,z:-d*axis.z};
   const nl=Math.hypot(xe.x,xe.y,xe.z);xe={x:xe.x/nl,y:xe.y/nl,z:xe.z/nl};
   const ye={x:axis.y*xe.z-axis.z*xe.y, y:axis.z*xe.x-axis.x*xe.z, z:axis.x*xe.y-axis.y*xe.x};
@@ -464,24 +480,251 @@ function drawSpace(){
   ctx.fillText("ドラッグで回転 / ダブルクリックでリセット",12,h-12);
 }
 
-/* ---------- view 2 : sky dome ---------- */
-function skyGrad(ctx,cx,cy,Rd,alt){
-  let top,bot;
-  if(alt>=10){top="#4E8FC4";bot="#8FC6E8";}
-  else if(alt>=0){const t=alt/10;top=mixHex("#33507F","#4E8FC4",t);bot=mixHex("#E2703A","#8FC6E8",t);}
-  else if(alt>=-10){const t=(alt+10)/10;top=mixHex("#0B1020","#33507F",t);bot=mixHex("#27356B","#E2703A",t);}
-  else {top="#0B1020";bot="#182148";}
-  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,Rd);
-  g.addColorStop(0,top);g.addColorStop(1,bot);
-  return g;
+/* ---------- view 2a : celestial dome (rotatable) ---------- */
+function drawSkyDome(){
+  const {ctx,w,h}=fit($("sky"));
+  ctx.clearRect(0,0,w,h);
+  const cx=w/2, cy=h*0.52, Rd=Math.min(w,h)*0.37;
+  const cam=camera(state.yawS,state.pitchS);
+  const dec=decOfDay(state.day);
+  const Hnow=hourAngle(state.time,state.day);
+  const now=sunAltAz(state.lat,dec,Hnow);
+  const di=dayInfo(state.lat,state.day);
+  const sans=SANS();
+
+  /* ENU: x=east, y=north, z=up */
+  const vec=(alt,az)=>({x:Math.sin(az*RAD)*Math.cos(alt*RAD),
+                        y:Math.cos(az*RAD)*Math.cos(alt*RAD),
+                        z:Math.sin(alt*RAD)});
+  const S=(p,scale)=>{const q=cam(p);const k=(scale||1)*Rd;
+    return {x:cx+q.x*k, y:cy-q.z*k, front:q.y<0};};
+
+  /* horizon ellipse path */
+  const horizon=new Path2D();
+  for(let a=0;a<=360;a+=3){
+    const p=S(vec(0,a));
+    a?horizon.lineTo(p.x,p.y):horizon.moveTo(p.x,p.y);
+  }
+  horizon.closePath();
+
+  /* sky backdrop: same gradient on ground ellipse + upper half disc (opaque → seamless) */
+  const [ctop,cbot]=skyColors(now.alt);
+  const g=ctx.createLinearGradient(0,cy-Rd,0,cy+Rd*0.55);
+  g.addColorStop(0,ctop);g.addColorStop(1,cbot);
+  ctx.fillStyle=g;
+  ctx.fill(horizon);
+  const upper=new Path2D();
+  upper.arc(cx,cy,Rd,Math.PI,TAU);
+  upper.closePath();
+  ctx.fill(upper);
+
+  /* stars as sun sinks */
+  const dark=clamp((0-now.alt)/12,0,1);
+  if(dark>0){
+    ctx.save();ctx.clip(upper);
+    ctx.fillStyle=`rgba(238,241,248,${0.65*dark})`;
+    for(let i=0;i<45;i++){
+      const a=(i*137.5)%360*RAD, rr=((i*53)%100)/100*Rd;
+      ctx.fillRect(cx+rr*Math.cos(a),cy-Math.abs(rr*Math.sin(a)),(i%4===0)?1.6:1,(i%4===0)?1.6:1);
+    }
+    ctx.restore();
+  }
+
+  /* ground tint over the horizon disc */
+  ctx.fillStyle="rgba(11,16,32,.38)";
+  ctx.fill(horizon);
+
+  /* outlines */
+  ctx.strokeStyle="rgba(238,241,248,.55)";ctx.lineWidth=1.2;
+  ctx.stroke(horizon);
+  ctx.beginPath();ctx.arc(cx,cy,Rd,Math.PI,TAU);ctx.stroke();
+
+  /* dotted N-S / E-W diameters */
+  ctx.strokeStyle="rgba(238,241,248,.35)";ctx.lineWidth=1;ctx.setLineDash([2,4]);
+  for(const [a1,a2] of [[0,180],[90,270]]){
+    const p1=S(vec(0,a1)),p2=S(vec(0,a2));
+    ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  /* cardinal labels */
+  ctx.font="13px "+SERIF();
+  ctx.fillStyle="#EEF1F8";ctx.textAlign="center";
+  for(const [name,a] of [["北",0],["東",90],["南",180],["西",270]]){
+    const p=S(vec(0,a));
+    const dx=p.x-cx,dy=p.y-cy,m=Math.hypot(dx,dy)||1;
+    ctx.fillText(name,p.x+dx/m*16,p.y+dy/m*16+4);
+  }
+  ctx.textAlign="left";
+
+  /* celestial axis toward the visible pole */
+  {
+    const north=state.lat>=0;
+    const pole=north?vec(Math.max(state.lat,0.1),0):vec(Math.max(-state.lat,0.1),180);
+    const pe=S(pole,1.14);
+    ctx.strokeStyle="rgba(238,241,248,.5)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(pe.x,pe.y);ctx.stroke();
+    ctx.fillStyle="#8FC6E8";
+    ctx.font="12px "+sans;
+    ctx.fillText("★",pe.x-4,pe.y+4);
+    ctx.fillStyle="rgba(143,198,232,.9)";
+    ctx.font="11px "+sans;
+    ctx.fillText(north?"北極星":"天の南極",pe.x+8,pe.y+4);
+    ctx.fillStyle="rgba(238,241,248,.55)";
+    ctx.fillText("地軸",(cx+pe.x)/2+6,(cy+pe.y)/2+12);
+  }
+
+  /* sun path arcs */
+  const drawArc=(decv,stroke,width)=>{
+    ctx.strokeStyle=stroke;ctx.lineWidth=width;
+    ctx.beginPath();let st=false;
+    for(let H=-180;H<=180;H+=1.5){
+      const sp=sunAltAz(state.lat,decv,H);
+      if(sp.alt<0){st=false;continue;}
+      const p=S(vec(sp.alt,sp.az));
+      st?ctx.lineTo(p.x,p.y):(ctx.moveTo(p.x,p.y),st=true);
+    }
+    ctx.stroke();
+    /* faint dashed continuation below the horizon */
+    ctx.save();ctx.globalAlpha=0.25;ctx.setLineDash([3,4]);
+    ctx.beginPath();st=false;
+    for(let H=-180;H<=180;H+=1.5){
+      const sp=sunAltAz(state.lat,decv,H);
+      if(sp.alt>=0||sp.alt<-20){st=false;continue;}
+      const p=S(vec(sp.alt,sp.az));
+      st?ctx.lineTo(p.x,p.y):(ctx.moveTo(p.x,p.y),st=true);
+    }
+    ctx.stroke();ctx.setLineDash([]);ctx.restore();
+  };
+  const labelArc=(decv,name,color)=>{
+    const sp=sunAltAz(state.lat,decv,0);
+    if(sp.alt<5)return;
+    const p=S(vec(sp.alt,sp.az));
+    ctx.fillStyle=color;ctx.font="11px "+sans;ctx.textAlign="center";
+    ctx.fillText(name,clamp(p.x,40,w-40),clamp(p.y-10,14,h-14));ctx.textAlign="left";
+  };
+  const REFS=[[23.44,"夏至","rgba(226,112,58,.8)"],
+              [0,"春分・秋分","rgba(127,200,169,.8)"],
+              [-23.44,"冬至","rgba(143,198,232,.8)"]];
+  for(const [rd,name,col] of REFS){
+    if(Math.abs(rd-dec)<0.4)continue;
+    drawArc(rd,col,1.4);
+    labelArc(rd,name,col);
+  }
+  drawArc(dec,"rgba(246,183,60,.95)",2.2);
+  {
+    const near=REFS.find(r=>Math.abs(r[0]-dec)<0.4);
+    labelArc(dec,near?near[1]:"今日","rgba(246,183,60,.95)");
+  }
+
+  /* hour dots on today's arc */
+  ctx.font="10px "+sans;
+  for(let hr=0;hr<24;hr+=3){
+    const sp=sunAltAz(state.lat,dec,hourAngle(hr,state.day));
+    if(sp.alt<0)continue;
+    const p=S(vec(sp.alt,sp.az));
+    ctx.beginPath();ctx.arc(p.x,p.y,2.2,0,TAU);
+    ctx.fillStyle="rgba(246,183,60,.9)";ctx.fill();
+    ctx.fillStyle="rgba(238,241,248,.75)";
+    ctx.fillText(String(hr),p.x+5,p.y-4);
+  }
+
+  /* motion arrows on today's arc */
+  const arrowAt=Hc=>{
+    const s1=sunAltAz(state.lat,dec,Hc-4), s2=sunAltAz(state.lat,dec,Hc+4);
+    if(s1.alt<3||s2.alt<3)return;
+    const p1=S(vec(s1.alt,s1.az)), p2=S(vec(s2.alt,s2.az));
+    const dx=p2.x-p1.x,dy=p2.y-p1.y,m=Math.hypot(dx,dy);
+    if(m<0.5)return;
+    const ux=dx/m,uy=dy/m,px=-uy,py=ux;
+    const tx=(p1.x+p2.x)/2+ux*5, ty=(p1.y+p2.y)/2+uy*5;
+    ctx.beginPath();
+    ctx.moveTo(tx,ty);
+    ctx.lineTo(tx-ux*9+px*4.5,ty-uy*9+py*4.5);
+    ctx.lineTo(tx-ux*9-px*4.5,ty-uy*9-py*4.5);
+    ctx.closePath();ctx.fillStyle="rgba(246,183,60,.95)";ctx.fill();
+  };
+  arrowAt(-45);arrowAt(45);
+
+  /* sunrise / sunset direction markers on the horizon */
+  if(di.type==="normal"){
+    for(const [Hc,name] of [[-di.H0,"日の出"],[di.H0,"日の入"]]){
+      const az=sunAltAz(state.lat,dec,Hc).az;
+      const p=S(vec(0,az));
+      ctx.beginPath();ctx.arc(p.x,p.y,3.2,0,TAU);
+      ctx.fillStyle="#F6B73C";ctx.fill();
+      ctx.strokeStyle="rgba(11,16,32,.8)";ctx.lineWidth=1;ctx.stroke();
+      const dx=p.x-cx,dy=p.y-cy,m=Math.hypot(dx,dy)||1;
+      ctx.fillStyle="rgba(246,183,60,.95)";ctx.font="10px "+sans;
+      ctx.textAlign="center";
+      ctx.fillText(name,p.x+dx/m*22,p.y+dy/m*22+3);
+      ctx.textAlign="left";
+    }
+  }
+
+  /* analemma */
+  if(state.analemma){
+    ctx.strokeStyle="rgba(143,198,232,.85)";ctx.lineWidth=1.4;
+    ctx.beginPath();let st=false;
+    for(let N=1;N<=366;N+=2){
+      const NN=((N-1)%365)+1;
+      const sp=sunAltAz(state.lat,decOfDay(NN),hourAngle(state.time,NN));
+      if(sp.alt<-20){st=false;continue;}
+      const p=S(vec(sp.alt,sp.az));
+      st?ctx.lineTo(p.x,p.y):(ctx.moveTo(p.x,p.y),st=true);
+    }
+    ctx.stroke();
+    if(now.alt>-20){
+      const p=S(vec(now.alt,now.az));
+      ctx.beginPath();ctx.arc(p.x,p.y,3.4,0,TAU);
+      ctx.fillStyle="#F6B73C";ctx.fill();
+      ctx.strokeStyle="#EEF1F8";ctx.lineWidth=1;ctx.stroke();
+    }
+  }
+
+  /* the sun now */
+  if(now.alt>=0){
+    const p=S(vec(now.alt,now.az));
+    const gg=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,24);
+    gg.addColorStop(0,"rgba(255,236,180,1)");gg.addColorStop(.3,"rgba(246,183,60,.9)");gg.addColorStop(1,"rgba(246,183,60,0)");
+    ctx.fillStyle=gg;ctx.beginPath();ctx.arc(p.x,p.y,24,0,TAU);ctx.fill();
+    ctx.fillStyle="#FFF3D6";ctx.beginPath();ctx.arc(p.x,p.y,6,0,TAU);ctx.fill();
+  }
+
+  /* observer figure at the center */
+  ctx.fillStyle="rgba(238,241,248,.85)";
+  ctx.beginPath();ctx.arc(cx,cy-9,3.4,0,TAU);ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx-3.5,cy+4);ctx.lineTo(cx+3.5,cy+4);ctx.lineTo(cx+1.6,cy-5);ctx.lineTo(cx-1.6,cy-5);
+  ctx.closePath();ctx.fill();
+
+  /* notes + hint */
+  ctx.font="11px "+sans;
+  ctx.fillStyle="rgba(154,165,196,.9)";
+  let y=h-12;
+  if(state.analemma){
+    ctx.fillText("アナレンマ — 毎日 "+fmtTime(state.time)+" の太陽の位置を1年分重ねた曲線",14,y);y-=16;
+  }
+  let note="";
+  if(di.type==="midnightSun")note="白夜 — 太陽は一日中沈みません";
+  else if(di.type==="polarNight")note="極夜 — 太陽は一日中昇りません";
+  else if(now.alt<0)note="太陽は地平線の下です";
+  if(note)ctx.fillText(note,14,y);
+  ctx.fillStyle="rgba(154,165,196,.55)";ctx.font="10px "+sans;
+  ctx.textAlign="right";
+  ctx.fillText("ドラッグで回転 / ダブルクリックでリセット",w-12,h-12);
+  ctx.textAlign="left";
 }
-function drawSky(){
+
+/* ---------- view 2b : flat all-sky (fisheye) ---------- */
+function drawSkyFlat(){
   const {ctx,w,h}=fit($("sky"));
   ctx.clearRect(0,0,w,h);
   const cx=w/2, cy=h*0.52, Rd=Math.min(w,h)*0.40;
   const dec=decOfDay(state.day);
   const Hnow=hourAngle(state.time,state.day);
   const now=sunAltAz(state.lat,dec,Hnow);
+  const di=dayInfo(state.lat,state.day);
   const sans=SANS();
 
   const proj=(alt,az)=>{
@@ -491,7 +734,10 @@ function drawSky(){
 
   ctx.save();
   ctx.beginPath();ctx.arc(cx,cy,Rd,0,TAU);ctx.clip();
-  ctx.fillStyle=skyGrad(ctx,cx,cy,Rd,now.alt);
+  const [ctop,cbot]=skyColors(now.alt);
+  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,Rd);
+  g.addColorStop(0,ctop);g.addColorStop(1,cbot);
+  ctx.fillStyle=g;
   ctx.fillRect(cx-Rd,cy-Rd,Rd*2,Rd*2);
 
   /* stars appear as sun sinks */
@@ -520,7 +766,7 @@ function drawSky(){
   ctx.beginPath();ctx.moveTo(cx-Rd,cy);ctx.lineTo(cx+Rd,cy);
   ctx.moveTo(cx,cy-Rd);ctx.lineTo(cx,cy+Rd);ctx.stroke();
 
-  /* reference arcs (solstices & equinox) + today's arc */
+  /* reference arcs + today's arc */
   const pathFor=(decv)=>{
     ctx.beginPath();let started=false;
     for(let H=-180;H<=180;H+=1.5){
@@ -547,7 +793,7 @@ function drawSky(){
     ctx.fillText(String(hr),p.x+5,p.y-4);
   }
 
-  /* analemma: the sun at this same clock time, every day of the year */
+  /* analemma */
   if(state.analemma){
     ctx.strokeStyle="rgba(143,198,232,.85)";ctx.lineWidth=1.4;
     ctx.beginPath();let started=false;
@@ -559,9 +805,8 @@ function drawSky(){
       if(!started){ctx.moveTo(p.x,p.y);started=true;}else ctx.lineTo(p.x,p.y);
     }
     ctx.stroke();
-    const spNow=sunAltAz(state.lat,dec,Hnow);
-    if(spNow.alt>-25){
-      const p=proj(spNow.alt,spNow.az);
+    if(now.alt>-25){
+      const p=proj(now.alt,now.az);
       ctx.beginPath();ctx.arc(p.x,p.y,3.4,0,TAU);
       ctx.fillStyle="#F6B73C";ctx.fill();
       ctx.strokeStyle="#EEF1F8";ctx.lineWidth=1;ctx.stroke();
@@ -571,9 +816,9 @@ function drawSky(){
   /* the sun now */
   if(now.alt>=0){
     const p=proj(now.alt,now.az);
-    const g=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,26);
-    g.addColorStop(0,"rgba(255,236,180,1)");g.addColorStop(.3,"rgba(246,183,60,.9)");g.addColorStop(1,"rgba(246,183,60,0)");
-    ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,26,0,TAU);ctx.fill();
+    const gg=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,26);
+    gg.addColorStop(0,"rgba(255,236,180,1)");gg.addColorStop(.3,"rgba(246,183,60,.9)");gg.addColorStop(1,"rgba(246,183,60,0)");
+    ctx.fillStyle=gg;ctx.beginPath();ctx.arc(p.x,p.y,26,0,TAU);ctx.fill();
     ctx.fillStyle="#FFF3D6";ctx.beginPath();ctx.arc(p.x,p.y,7,0,TAU);ctx.fill();
   }
   ctx.restore();
@@ -589,10 +834,24 @@ function drawSky(){
   ctx.fillText("西",cx-Rd-16,cy+4);
   ctx.textAlign="left";
 
+  /* sunrise / sunset direction markers on the horizon ring */
+  if(di.type==="normal"){
+    ctx.font="10px "+sans;
+    for(const [Hc,name] of [[-di.H0,"日の出"],[di.H0,"日の入"]]){
+      const az=sunAltAz(state.lat,dec,Hc).az;
+      const p=proj(0,az);
+      ctx.beginPath();ctx.arc(p.x,p.y,3.2,0,TAU);
+      ctx.fillStyle="#F6B73C";ctx.fill();
+      ctx.strokeStyle="rgba(11,16,32,.8)";ctx.lineWidth=1;ctx.stroke();
+      const lx=cx+(Rd-24)*Math.sin(az*RAD), ly=cy-(Rd-24)*Math.cos(az*RAD);
+      ctx.fillStyle="rgba(246,183,60,.95)";ctx.textAlign="center";
+      ctx.fillText(name,lx,ly+3);ctx.textAlign="left";
+    }
+  }
+
   /* status notes */
   ctx.font="11px "+sans;
   ctx.fillStyle="rgba(154,165,196,.9)";
-  const di=dayInfo(state.lat,state.day);
   let y=h-12;
   if(state.analemma){
     ctx.fillText("アナレンマ — 毎日 "+fmtTime(state.time)+" の太陽の位置を1年分重ねた曲線",14,y);y-=16;
@@ -602,6 +861,10 @@ function drawSky(){
   else if(di.type==="polarNight")note="極夜 — 太陽は一日中昇りません";
   else if(now.alt<0)note="太陽は地平線の下です";
   if(note)ctx.fillText(note,14,y);
+}
+
+function drawSky(){
+  if(state.skyMode==="dome")drawSkyDome();else drawSkyFlat();
 }
 
 /* ---------- readouts ---------- */
@@ -660,27 +923,45 @@ $("anaBtn").addEventListener("click",()=>{
   $("anaBtn").setAttribute("aria-pressed",String(state.analemma));
   render();
 });
+function setSkyMode(m){
+  state.skyMode=m;
+  $("modeDome").classList.toggle("on",m==="dome");
+  $("modeDome").setAttribute("aria-pressed",String(m==="dome"));
+  $("modeFlat").classList.toggle("on",m==="flat");
+  $("modeFlat").setAttribute("aria-pressed",String(m==="flat"));
+  $("sky").classList.toggle("grabbable",m==="dome");
+  render();
+}
+$("modeDome").addEventListener("click",()=>setSkyMode("dome"));
+$("modeFlat").addEventListener("click",()=>setSkyMode("flat"));
 
-/* drag-to-rotate the space view */
-(function(){
-  const cv=$("space");
+/* drag-to-rotate */
+function makeDraggable(cv,onDrag,onReset,isActive){
   let dragging=false,lx=0,ly=0;
   cv.addEventListener("pointerdown",e=>{
+    if(!isActive())return;
     dragging=true;lx=e.clientX;ly=e.clientY;
     cv.classList.add("dragging");cv.setPointerCapture(e.pointerId);
   });
   cv.addEventListener("pointermove",e=>{
     if(!dragging)return;
-    state.yaw=(state.yaw+(e.clientX-lx)*0.4)%360;
-    state.pitch=clamp(state.pitch+(e.clientY-ly)*0.4,-60,60);
+    onDrag(e.clientX-lx,e.clientY-ly);
     lx=e.clientX;ly=e.clientY;
     render();
   });
-  const end=e=>{dragging=false;cv.classList.remove("dragging");};
+  const end=()=>{dragging=false;cv.classList.remove("dragging");};
   cv.addEventListener("pointerup",end);
   cv.addEventListener("pointercancel",end);
-  cv.addEventListener("dblclick",()=>{state.yaw=0;state.pitch=18;render();});
-})();
+  cv.addEventListener("dblclick",()=>{if(isActive()){onReset();render();}});
+}
+makeDraggable($("space"),
+  (dx,dy)=>{state.yaw=(state.yaw+dx*0.4)%360;state.pitch=clamp(state.pitch+dy*0.4,-60,60);},
+  ()=>{state.yaw=0;state.pitch=18;},
+  ()=>true);
+makeDraggable($("sky"),
+  (dx,dy)=>{state.yawS=(state.yawS+dx*0.4)%360;state.pitchS=clamp(state.pitchS+dy*0.4,2,85);},
+  ()=>{state.yawS=-80;state.pitchS=24;},
+  ()=>state.skyMode==="dome");
 
 /* playback */
 let raf=null,lastT=0;
