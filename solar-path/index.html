@@ -263,8 +263,11 @@ const $=id=>document.getElementById(id);
 const RAD=Math.PI/180, TAU=Math.PI*2;
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 
+const _boot=new Date();
 const state={
-  lat:35.7, day:172, time:12,
+  lat:35.7,
+  day:Math.min(365,Math.floor((_boot-new Date(_boot.getFullYear(),0,1))/86400000)+1),
+  time:_boot.getHours()+_boot.getMinutes()/60,
   yaw:0, pitch:18,          // space view camera
   yawS:-80, pitchS:24,      // celestial dome camera
   skyMode:"dome",
@@ -1160,6 +1163,10 @@ function tick(t){
   render();
   raf=requestAnimationFrame(tick);
 }
+
+/* start at today's date and the current clock time */
+$("date").value=state.day;
+$("time").value=state.time;
 
 new ResizeObserver(()=>render()).observe($("space"));
 new ResizeObserver(()=>render()).observe($("sky"));
