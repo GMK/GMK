@@ -1,0 +1,95 @@
+<title>戦国日本 版図の変遷</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>/*__CSS__*/</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <h1><span class="thin">応仁元年 — 元和元年</span>戦国日本 版図の変遷</h1>
+    <p class="lede">応仁の乱で幕府の箍が外れてから、大坂夏の陣で豊臣家が滅ぶまでの一四九年。
+      六十八の旧国を誰が握っていたのかを、年ごとに塗り分けた。下の帯を動かすと版図が動く。</p>
+  </header>
+
+  <div class="board">
+    <section class="stage" aria-label="戦国日本の版図地図">
+      <canvas id="map" role="img" aria-label="旧国ごとに支配大名家を塗り分けた日本地図"></canvas>
+      <div class="stage-bar" style="top:auto;bottom:12px">
+        <button type="button" class="chip" data-lab="clan" aria-pressed="true">大名家</button>
+        <button type="button" class="chip" data-lab="prov" aria-pressed="true">国名</button>
+      </div>
+      <div class="scalebar"><i></i>およそ 200km</div>
+      <div class="tip" id="tip" aria-hidden="true"></div>
+    </section>
+
+    <aside class="side">
+      <div class="card">
+        <h2>この年のできごと</h2>
+        <div class="event" id="event"></div>
+      </div>
+
+      <div class="card">
+        <h2>石高シェアの推移</h2>
+        <canvas id="share" height="112" aria-label="1467年から1615年までの、勢力別の石高シェアの積み上げ推移"></canvas>
+        <p class="hint" style="margin-top:8px">帯の上をなぞると、その年へ移ります。</p>
+      </div>
+
+      <div class="card">
+        <h2>勢力（石高順）</h2>
+        <ul class="rank" id="rank"></ul>
+      </div>
+
+      <div class="card detail" id="detail"></div>
+    </aside>
+  </div>
+
+  <section class="timeline" aria-label="西暦スライダー">
+    <div class="tl-head">
+      <button type="button" class="play" id="play" aria-label="年を自動で進める"></button>
+      <button type="button" class="step" data-d="-10">−10年</button>
+      <button type="button" class="step" data-d="-1">−1年</button>
+      <button type="button" class="step" data-d="1">＋1年</button>
+      <button type="button" class="step" data-d="10">＋10年</button>
+      <span class="tl-note">← → で一年ずつ、Shift＋← → で十年、スペースで再生</span>
+      <div class="readout">
+        <span class="year" id="year">1560<small>年</small></span>
+        <span class="wareki" id="wareki">永禄三年</span>
+        <span class="era" id="era">織田信長の台頭</span>
+      </div>
+    </div>
+    <div class="track">
+      <div class="eras" id="eras"></div>
+      <div class="ticks" id="ticks"></div>
+      <div class="rail"><i id="rail-fill"></i></div>
+      <input type="range" id="slider" step="1" aria-label="西暦（年）">
+      <div class="scale" id="scale"></div>
+    </div>
+  </section>
+
+  <footer class="notes">
+    <div>
+      <h3>地図の読み方</h3>
+      <p>塗りの色は、その年にその国を実質的に押さえていた大名家。白っぽい太い線が大名家どうしの境、細い線が国境。
+        斜めの網掛けは、ひとつの大名家にまとまらず国人や一揆が分立していた国。</p>
+    </div>
+    <div>
+      <h3>つくり</h3>
+      <p>旧国の位置は代表点からの最近傍で区切った概略図で、実際の国境線ではない。
+        陸奥と出羽は広すぎて大名も分立したため後世の細分（磐城・岩代・陸前・陸中／置賜・村山庄内・秋田）で、
+        信濃は南北に分けて示した。石高は慶長期の国別高（合計およそ千八百五十万石）。</p>
+    </div>
+    <div>
+      <h3>色について</h3>
+      <p>地図上で実際に隣り合った大名家の組を全期間から洗い出し、そのすべてが見分けられるよう色を選んである。
+        P型・D型・T型色覚での色差も検証済みだが、色だけに頼らずに済むよう、すべての領地に家名を重ねている。</p>
+    </div>
+    <div>
+      <h3>ことわり</h3>
+      <p>支配の交替は年単位に丸めてある。実際には一国が複数の勢力に割れている時期も多く、
+        従属・同盟・名目上の守護職といった濃淡はこの塗り分けでは表せない。元号も改元が年途中のため目安。</p>
+    </div>
+  </footer>
+</div>
+
+<script>/*__DATA__*/</script>
+<script>/*__APP__*/</script>

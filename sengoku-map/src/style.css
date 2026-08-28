@@ -1,0 +1,169 @@
+/* 「墨と岩絵具」— 屏風絵の夜のような地色に、鉱物顔料で版図を置く。
+   単一テーマとして設計している（地図の塗りは暗い地色を前提に検証済みのため）。
+   どのホスト上でも同じに見えるよう、背景と文字色はすべて明示的に塗る。 */
+:root{
+  --sumi:#0B0F16;        /* 墨 — 画面の地 */
+  --sea:#101822;         /* 海 */
+  --panel:#141B26;       /* 料紙 — パネル面 */
+  --panel-hi:#1A2230;
+  --edge:#26303F;        /* 界線 */
+  --edge-hi:#3A4657;
+  --washi:#ECE4D6;       /* 楮紙の白 — 主文字 */
+  --washi-2:#BDB6A8;
+  --washi-3:#8E897C;     /* 補助文字（地色に対し 4.5:1 以上） */
+  --kin:#C9A227;         /* 金泥 — 罫と見出しの差し色 */
+  --shu:#E2542F;         /* 朱 — 現在位置の印 */
+  --mincho:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho",YuMincho,"Noto Serif JP",serif;
+  --gothic:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,"Noto Sans JP",system-ui,sans-serif;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--sumi); color:var(--washi);
+  font-family:var(--gothic); font-size:15px; line-height:1.7;
+  font-feature-settings:"palt" 1;
+  -webkit-font-smoothing:antialiased;
+}
+:focus-visible{outline:2px solid var(--kin); outline-offset:2px; border-radius:2px}
+
+.wrap{max-width:1400px; margin:0 auto; padding:var(--s6) var(--s5) var(--s7)}
+
+/* ── 冒頭 ───────────────────────────────────────────── */
+.masthead{display:flex; flex-wrap:wrap; align-items:flex-end; gap:var(--s4) var(--s6);
+  padding-bottom:var(--s4); border-bottom:1px solid var(--edge); margin-bottom:var(--s5)}
+.masthead h1{
+  font-family:var(--mincho); font-weight:800; margin:0;
+  font-size:clamp(28px,4.2vw,46px); line-height:1.15; letter-spacing:.04em;
+  text-wrap:balance;
+}
+.masthead h1 .thin{display:block; font-size:.44em; letter-spacing:.34em; font-weight:600;
+  color:var(--kin); margin-bottom:.5em}
+.lede{margin:0; max-width:46ch; color:var(--washi-2); font-size:14px; line-height:1.85}
+
+/* ── 本体レイアウト ─────────────────────────────────── */
+.board{display:grid; grid-template-columns:minmax(0,1fr) 336px; gap:var(--s5); align-items:start}
+@media (max-width:1040px){ .board{grid-template-columns:minmax(0,1fr)} }
+
+.stage{position:relative; background:var(--sea); border:1px solid var(--edge); border-radius:3px;
+  overflow:hidden}
+.stage canvas{display:block; width:100%; height:auto; touch-action:manipulation}
+.stage-bar{position:absolute; left:var(--s3); top:var(--s3); display:flex; gap:var(--s1);
+  background:rgba(11,15,22,.78); border:1px solid var(--edge); border-radius:2px; padding:3px}
+.chip{appearance:none; background:none; border:0; color:var(--washi-3); font-family:var(--gothic);
+  font-size:11.5px; letter-spacing:.1em; padding:5px 10px; cursor:pointer; border-radius:2px}
+.chip[aria-pressed="true"]{background:var(--panel-hi); color:var(--washi)}
+.chip:hover{color:var(--washi)}
+
+.scalebar{position:absolute; right:var(--s3); bottom:var(--s3); color:var(--washi-3);
+  font-size:10.5px; letter-spacing:.12em; text-align:right; pointer-events:none}
+.scalebar i{display:block; height:1px; background:var(--washi-3); margin-bottom:3px; opacity:.7}
+
+/* 吹き出し */
+.tip{position:absolute; pointer-events:none; opacity:0; transform:translate(-50%,-100%);
+  background:rgba(11,15,22,.94); border:1px solid var(--edge-hi); border-radius:2px;
+  padding:7px 11px 8px; min-width:118px; transition:opacity .12s ease}
+.tip.on{opacity:1}
+.tip .t-p{font-family:var(--mincho); font-size:15px; font-weight:600; letter-spacing:.06em}
+.tip .t-l{font-size:12px; color:var(--washi-2); display:flex; align-items:center; gap:6px; margin-top:2px}
+.tip .t-k{font-size:10.5px; color:var(--washi-3); letter-spacing:.06em; margin-top:3px}
+.sw{width:9px; height:9px; border-radius:1px; flex:0 0 auto; display:inline-block}
+
+/* ── 右の柱 ─────────────────────────────────────────── */
+.side{display:flex; flex-direction:column; gap:var(--s4)}
+.card{background:var(--panel); border:1px solid var(--edge); border-radius:3px; padding:var(--s4)}
+.card h2{margin:0 0 var(--s3); font-size:11px; font-weight:500; letter-spacing:.24em;
+  color:var(--kin); font-family:var(--gothic)}
+
+.readout{margin-left:auto; display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
+.year{font-family:var(--mincho); font-weight:800; font-size:30px; line-height:1;
+  letter-spacing:.02em; font-variant-numeric:tabular-nums}
+.year small{font-size:13px; font-weight:600; color:var(--washi-3); letter-spacing:.08em; margin-left:3px}
+.wareki{color:var(--washi-2); font-size:13px; letter-spacing:.08em; font-family:var(--mincho)}
+.era{font-family:var(--mincho); font-size:13.5px; color:var(--kin); letter-spacing:.06em;
+  padding-left:12px; border-left:1px solid var(--edge-hi)}
+@media (max-width:620px){ .tl-note{display:none} .readout{margin-left:0; width:100%} }
+
+.event{margin:0}
+.event .ev-y{font-family:var(--mincho); font-size:13px; color:var(--kin); letter-spacing:.1em}
+.event .ev-t{font-family:var(--mincho); font-size:17px; font-weight:600; margin:2px 0 6px; letter-spacing:.04em}
+.event .ev-d{margin:0; font-size:13px; color:var(--washi-2); line-height:1.8}
+.event .ev-none{font-size:13px; color:var(--washi-3)}
+
+/* 勢力表 */
+.rank{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:7px}
+.rank li{display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:8px;
+  cursor:default; padding:1px 2px; border-radius:2px}
+.rank li.dim{opacity:.42}
+.rank li:hover{background:var(--panel-hi)}
+.rank .nm{font-size:12.5px; letter-spacing:.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.rank .kk{font-size:11px; color:var(--washi-3); font-variant-numeric:tabular-nums; letter-spacing:.02em}
+.rank .bar{grid-column:2/4; height:4px; background:var(--edge); border-radius:2px; overflow:hidden; margin-top:-2px}
+.rank .bar i{display:block; height:100%; border-radius:2px}
+.rank .hatch{background-image:repeating-linear-gradient(45deg,#6E7480 0 2px,#39404C 2px 4px)}
+
+/* 国の詳細 */
+.detail .d-name{font-family:var(--mincho); font-size:22px; font-weight:600; letter-spacing:.06em; margin:0}
+.detail .d-meta{font-size:11.5px; color:var(--washi-3); letter-spacing:.08em; margin:1px 0 var(--s3)}
+.chron{list-style:none; margin:0; padding:0; border-left:1px solid var(--edge); max-height:236px; overflow-y:auto}
+.chron li{position:relative; padding:3px 0 7px 14px; font-size:12.5px; color:var(--washi-2)}
+.chron li::before{content:""; position:absolute; left:-4px; top:11px; width:7px; height:7px;
+  border-radius:50%; background:var(--edge-hi)}
+.chron li.now{color:var(--washi)}
+.chron li.now::before{background:var(--shu); box-shadow:0 0 0 3px rgba(226,84,47,.2)}
+.chron .c-y{font-variant-numeric:tabular-nums; color:var(--washi-3); margin-right:6px; font-size:11.5px}
+.hint{font-size:12px; color:var(--washi-3); margin:0}
+
+/* ── 年表スライダー ─────────────────────────────────── */
+.timeline{margin-top:var(--s5); background:var(--panel); border:1px solid var(--edge);
+  border-radius:3px; padding:var(--s4) var(--s5) var(--s5)}
+.tl-head{display:flex; align-items:center; gap:var(--s3); margin-bottom:var(--s3); flex-wrap:wrap}
+.play{appearance:none; width:38px; height:38px; border-radius:50%; border:1px solid var(--edge-hi);
+  background:var(--panel-hi); color:var(--washi); cursor:pointer; display:grid; place-items:center; flex:0 0 auto}
+.play:hover{border-color:var(--kin); color:var(--kin)}
+.play svg{width:13px; height:13px; fill:currentColor}
+.step{appearance:none; background:none; border:1px solid var(--edge); color:var(--washi-3);
+  border-radius:2px; font-family:var(--gothic); font-size:11.5px; padding:5px 9px; cursor:pointer; letter-spacing:.06em}
+.step:hover{color:var(--washi); border-color:var(--edge-hi)}
+.tl-note{font-size:11.5px; color:var(--washi-3); letter-spacing:.06em}
+
+.track{position:relative; height:76px}
+.eras{position:absolute; inset:0 0 auto; height:19px; display:flex; border-radius:2px; overflow:hidden}
+.eras span{font-size:10.5px; letter-spacing:.08em; color:var(--washi-3); padding:2px 7px;
+  border-right:1px solid var(--sumi); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  background:var(--panel-hi); line-height:15px}
+.eras span:last-child{border-right:0}
+.eras span.on{background:#212C3D; color:var(--washi)}
+.ticks{position:absolute; left:0; right:0; top:22px; height:17px; z-index:2}
+.ticks button{position:absolute; top:0; transform:translateX(-50%); width:14px; height:17px;
+  appearance:none; background:none; border:0; padding:0; cursor:pointer}
+.ticks button::after{content:""; position:absolute; left:50%; top:3px; width:1px; height:9px;
+  background:var(--edge-hi); transform:translateX(-50%)}
+.ticks button:hover::after,.ticks button.on::after{background:var(--kin); height:14px}
+.rail{position:absolute; left:0; right:0; top:52px; height:3px; background:var(--edge); border-radius:2px}
+.rail i{position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg,#3A4657,var(--kin)); border-radius:2px}
+input[type=range]{position:absolute; left:0; right:0; top:44px; width:100%; height:20px; margin:0;
+  appearance:none; background:none; cursor:pointer}
+input[type=range]::-webkit-slider-thumb{appearance:none; width:15px; height:15px; border-radius:50%;
+  background:var(--shu); border:2px solid #F4EDE0; box-shadow:0 0 0 4px rgba(226,84,47,.22); margin-top:0}
+input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; background:var(--shu);
+  border:2px solid #F4EDE0; box-shadow:0 0 0 4px rgba(226,84,47,.22)}
+input[type=range]::-webkit-slider-runnable-track{height:20px; background:none}
+input[type=range]::-moz-range-track{height:20px; background:none}
+.scale{position:absolute; left:0; right:0; top:62px; height:14px}
+.scale span{position:absolute; transform:translateX(-50%); font-size:10px; color:var(--washi-3);
+  font-variant-numeric:tabular-nums; letter-spacing:.04em}
+
+/* ── 注記 ───────────────────────────────────────────── */
+.notes{margin-top:var(--s5); padding-top:var(--s4); border-top:1px solid var(--edge);
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:var(--s4) var(--s6)}
+.notes h3{font-size:11px; letter-spacing:.24em; color:var(--kin); margin:0 0 6px; font-weight:500}
+.notes p{margin:0; font-size:12px; color:var(--washi-3); line-height:1.85; max-width:52ch}
+.notes p + p{margin-top:6px}
+
+@media (prefers-reduced-motion:reduce){ *{transition-duration:.01ms !important} }
+
+.sr{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden;
+  clip:rect(0 0 0 0); white-space:nowrap; border:0}
+
+#share{display:block; width:100%; height:112px; cursor:ew-resize; touch-action:none}
